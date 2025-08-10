@@ -684,8 +684,11 @@ class spmatrix(object):
             return self._imag()
         elif attr == 'size':
             return self.getnnz()
+        elif attr == 'round':
+            return getattr(self, '__round__')
         else:
             raise AttributeError(attr + " not found")
+        
 
     def transpose(self, axes=None, copy=False):
         """

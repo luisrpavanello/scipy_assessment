@@ -5,13 +5,23 @@ FROM python:3.8-slim-buster
 WORKDIR /usr/src/app
 
 # Install system dependencies
-RUN apt-get update && apt-get install -y \
-    build-essential \
-    gfortran \
-    libopenblas-dev \
-    liblapack-dev \
-    git \
-    && rm -rf /var/lib/apt/lists/*
+RUN (apt-get update && apt-get install -y \
+        build-essential \
+        gfortran \
+        libopenblas-dev \
+        liblapack-dev \
+        git) || \
+    (echo "Using fallback package sources..." && \
+     echo "deb http://archive.debian.org/debian buster main" > /etc/apt/sources.list && \
+     echo "deb http://archive.debian.org/debian-security buster/updates main" >> /etc/apt/sources.list && \
+     apt-get update && \
+     apt-get install -y \
+        build-essential \
+        gfortran \
+        libopenblas-dev \
+        liblapack-dev \
+        git) && \
+    rm -rf /var/lib/apt/lists/*
 
 # Upgrade pip and install specific versions of setuptools and wheel
 RUN pip install --no-cache-dir --upgrade pip

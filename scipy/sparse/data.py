@@ -36,6 +36,9 @@ class _data_matrix(spmatrix):
 
     def __abs__(self):
         return self._with_data(abs(self._deduped_data()))
+    
+    def __round__(self, decimals=0):
+        return self._with_data(np.round(self.data, decimals=decimals))
 
     def _real(self):
         return self._with_data(self.data.real)

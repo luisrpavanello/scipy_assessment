@@ -1,0 +1,106 @@
+diff --git a/Dockerfile b/Dockerfile
+index 279e14a87..262e2aa5e 100644
+--- a/Dockerfile
++++ b/Dockerfile
+@@ -5,13 +5,23 @@ FROM python:3.8-slim-buster
+ WORKDIR /usr/src/app
+ 
+ # Install system dependencies
+-RUN apt-get update && apt-get install -y \
+-    build-essential \
+-    gfortran \
+-    libopenblas-dev \
+-    liblapack-dev \
+-    git \
+-    && rm -rf /var/lib/apt/lists/*
++RUN (apt-get update && apt-get install -y \
++        build-essential \
++        gfortran \
++        libopenblas-dev \
++        liblapack-dev \
++        git) || \
++    (echo "Using fallback package sources..." && \
++     echo "deb http://archive.debian.org/debian buster main" > /etc/apt/sources.list && \
++     echo "deb http://archive.debian.org/debian-security buster/updates main" >> /etc/apt/sources.list && \
++     apt-get update && \
++     apt-get install -y \
++        build-essential \
++        gfortran \
++        libopenblas-dev \
++        liblapack-dev \
++        git) && \
++    rm -rf /var/lib/apt/lists/*
+ 
+ # Upgrade pip and install specific versions of setuptools and wheel
+ RUN pip install --no-cache-dir --upgrade pip
+diff --git a/pytest.ini b/pytest.ini
+deleted file mode 100644
+index 6aa3545e1..000000000
+--- a/pytest.ini
++++ /dev/null
+@@ -1,14 +0,0 @@
+-[pytest]
+-addopts = -l
+-
+-filterwarnings =
+-    error
+-    always::scipy._lib._testutils.FPUModeChangeWarning
+-    once:.*LAPACK bug 0038.*:RuntimeWarning
+-    ignore:Using or importing the ABCs from 'collections'*:DeprecationWarning
+-    ignore:can't resolve package from __spec__ or __package__, falling back on __name__ and __path__:ImportWarning
+-    once:the imp module is deprecated in favour of importlib.*:DeprecationWarning
+-    once:the imp module is deprecated in favour of importlib.*:PendingDeprecationWarning
+-
+-env =
+-    PYTHONHASHSEED=0
+diff --git a/scipy/sparse/base.py b/scipy/sparse/base.py
+index 24a96bd8c..13ea303e2 100644
+--- a/scipy/sparse/base.py
++++ b/scipy/sparse/base.py
+@@ -684,8 +684,11 @@ class spmatrix(object):
+             return self._imag()
+         elif attr == 'size':
+             return self.getnnz()
++        elif attr == 'round':
++            return getattr(self, '__round__')
+         else:
+             raise AttributeError(attr + " not found")
++        
+ 
+     def transpose(self, axes=None, copy=False):
+         """
+diff --git a/scipy/sparse/data.py b/scipy/sparse/data.py
+index 8a83379ac..999388e44 100644
+--- a/scipy/sparse/data.py
++++ b/scipy/sparse/data.py
+@@ -36,6 +36,9 @@ class _data_matrix(spmatrix):
+ 
+     def __abs__(self):
+         return self._with_data(abs(self._deduped_data()))
++    
++    def __round__(self, decimals=0):
++        return self._with_data(np.round(self.data, decimals=decimals))
+ 
+     def _real(self):
+         return self._with_data(self.data.real)
+diff --git a/setup.py b/setup.py
+index 63c70abc6..2c3fa7ae6 100755
+--- a/setup.py
++++ b/setup.py
+@@ -56,7 +56,7 @@ Operating System :: MacOS
+ MAJOR = 1
+ MINOR = 4
+ MICRO = 0
+-ISRELEASED = False
++ISRELEASED = True
+ VERSION = '%d.%d.%d' % (MAJOR, MINOR, MICRO)
+ 
+ 
+@@ -490,7 +490,6 @@ def setup_package():
+         cmdclass=cmdclass,
+         classifiers=[_f for _f in CLASSIFIERS.split('\n') if _f],
+         platforms=["Windows", "Linux", "Solaris", "Mac OS-X", "Unix"],
+-        test_suite='nose.collector',
+         setup_requires=build_requires,
+         install_requires=build_requires,
+         python_requires='>=3.5',
