@@ -33,26 +33,61 @@ index 279e14a87..262e2aa5e 100644
  
  # Upgrade pip and install specific versions of setuptools and wheel
  RUN pip install --no-cache-dir --upgrade pip
-diff --git a/pytest.ini b/pytest.ini
-deleted file mode 100644
-index 6aa3545e1..000000000
---- a/pytest.ini
-+++ /dev/null
-@@ -1,14 +0,0 @@
--[pytest]
--addopts = -l
--
--filterwarnings =
--    error
--    always::scipy._lib._testutils.FPUModeChangeWarning
--    once:.*LAPACK bug 0038.*:RuntimeWarning
--    ignore:Using or importing the ABCs from 'collections'*:DeprecationWarning
--    ignore:can't resolve package from __spec__ or __package__, falling back on __name__ and __path__:ImportWarning
--    once:the imp module is deprecated in favour of importlib.*:DeprecationWarning
--    once:the imp module is deprecated in favour of importlib.*:PendingDeprecationWarning
--
--env =
--    PYTHONHASHSEED=0
+diff --git a/README.md b/README.md
+index 3af66390f..597722d1c 100644
+--- a/README.md
++++ b/README.md
+@@ -1,10 +1,41 @@
+ # Revelo's Assessment
+ 
+-Do **NOT** open pull requests to this repository. If you do, your application will be immediately discarded.
++## Implementation of round() for sparse matrices
+ 
+-## Thoughts
++- Added `__round__` method to `scipy/sparse/data.py`
++- Implemented support for `decimals` parameter
++- Added comprehensive tests verifying:
++- Basic rounding
++- Different decimal places
++- Empty matrices
++- Integer matrices
+ 
+-Replace the content of this file with your most important **thoughts** during the assessment execution. E.g.:
+-- 12:32: Started looking for A,B,C
+-- 12:35: Found X.
+-- 12:41: Noticed it was the wrong path because of Y and Z and decided to change my approach to...
++## Development Process
++
++1. **Initial Analysis**:
++- I identified that the `__round__` method was missing in sparse matrices
++- I checked the similar implementation of `__abs__` as a reference
++
++2. **Development**:
++- I implemented it in `scipy/sparse/data.py`:
++```python
++def __round__(self, decimals=0):
++return self._with_data(np.round(self.data, decimals=decimals))
++```
++- I added handling to `__getattr__` in `base.py` to map `.round()` to `__round__`
++
++3. **Tests**:
++- I created 4 comprehensive tests in `test_round.py`:
++- Basic rounding case
++- Rounding with different decimal places
++- Empty matrix
++- Matrix with integer values
++
++4. **Difficulties Encountered**:
++- Initial issues with Docker and dependencies
++- Need to modify both `data.py` and `base.py`
++- Challenge of ensuring preservation of the sparse structure
++
++5. **Final Solution**:
++- Complete and robust implementation
++- All tests passing
+diff --git a/round_implementation.patch b/round_implementation.patch
+new file mode 100644
+index 000000000..e69de29bb
 diff --git a/scipy/sparse/base.py b/scipy/sparse/base.py
 index 24a96bd8c..13ea303e2 100644
 --- a/scipy/sparse/base.py
@@ -83,24 +118,71 @@ index 8a83379ac..999388e44 100644
  
      def _real(self):
          return self._with_data(self.data.real)
-diff --git a/setup.py b/setup.py
-index 63c70abc6..2c3fa7ae6 100755
---- a/setup.py
-+++ b/setup.py
-@@ -56,7 +56,7 @@ Operating System :: MacOS
- MAJOR = 1
- MINOR = 4
- MICRO = 0
--ISRELEASED = False
-+ISRELEASED = True
- VERSION = '%d.%d.%d' % (MAJOR, MINOR, MICRO)
- 
- 
-@@ -490,7 +490,6 @@ def setup_package():
-         cmdclass=cmdclass,
-         classifiers=[_f for _f in CLASSIFIERS.split('\n') if _f],
-         platforms=["Windows", "Linux", "Solaris", "Mac OS-X", "Unix"],
--        test_suite='nose.collector',
-         setup_requires=build_requires,
-         install_requires=build_requires,
-         python_requires='>=3.5',
+diff --git a/scipy/sparse/tests/test_round.py b/scipy/sparse/tests/test_round.py
+new file mode 100644
+index 000000000..d6a050b36
+--- /dev/null
++++ b/scipy/sparse/tests/test_round.py
+@@ -0,0 +1,61 @@
++import numpy as np
++from scipy.sparse import csr_matrix, csc_matrix, isspmatrix_csr, isspmatrix_csc
++
++def test_round():
++    """Test rounding of sparse matrix elements"""
++    # Test basic rounding
++    data = np.array([1.1, 2.5, 3.9, 4.4])
++    row = np.array([0, 0, 1, 1])
++    col = np.array([0, 1, 0, 1])
++    mat = csr_matrix((data, (row, col)), shape=(2, 2))
++    
++    rounded = mat.round()
++    expected_data = np.array([1., 2., 4., 4.])
++    expected = csr_matrix((expected_data, (row, col)), shape=(2, 2))
++    
++    assert isspmatrix_csr(rounded)
++    assert np.array_equal(rounded.data, expected.data)
++    assert np.array_equal(rounded.indices, expected.indices)
++    assert np.array_equal(rounded.indptr, expected.indptr)
++
++def test_round_with_decimals():
++    """Test rounding with different decimal places"""
++    data = np.array([1.123, 2.456, 3.789, 4.999])
++    row = np.array([0, 0, 1, 1])
++    col = np.array([0, 1, 0, 1])
++    mat = csc_matrix((data, (row, col)), shape=(2, 2))
++    
++    # Test rounding to 1 decimal place
++    rounded1 = mat.round(decimals=1)
++    expected_data1 = np.array([1.1, 2.5, 3.8, 5.0])
++    expected1 = csc_matrix((expected_data1, (row, col)), shape=(2, 2))
++    
++    assert isspmatrix_csc(rounded1)
++    assert np.allclose(rounded1.data, expected1.data)
++    
++    # Test rounding to 2 decimal places
++    rounded2 = mat.round(decimals=2)
++    expected_data2 = np.array([1.12, 2.46, 3.79, 5.00])
++    expected2 = csc_matrix((expected_data2, (row, col)), shape=(2, 2))
++    
++    assert isspmatrix_csc(rounded2)
++    assert np.allclose(rounded2.data, expected2.data)
++
++def test_round_empty_matrix():
++    """Test rounding with empty matrix"""
++    mat = csr_matrix((3, 4))
++    rounded = mat.round()
++    assert isspmatrix_csr(rounded)
++    assert rounded.shape == (3, 4)
++    assert rounded.nnz == 0
++
++def test_round_integer_matrix():
++    """Test rounding with integer matrix (should be unchanged)"""
++    data = np.array([1, 2, 3, 4])
++    row = np.array([0, 0, 1, 1])
++    col = np.array([0, 1, 0, 1])
++    mat = csr_matrix((data, (row, col)), shape=(2, 2))
++    
++    rounded = mat.round()
++    assert isspmatrix_csr(rounded)
++    assert np.array_equal(rounded.data, mat.data)
+\ No newline at end of file
